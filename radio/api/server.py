@@ -123,34 +123,16 @@ def liquidsoap_command(command):
 
 
 def play_next_track(path):
-    """Queue a local track, wait until Liquidsoap can play it, then skip to it."""
-    response = liquidsoap_command(f"next_track.push {path}")
-    first_line = response.splitlines()[0].strip()
-    if not first_line.isdecimal():
-        raise OSError("Liquidsoap did not return a request id")
-
-    request_id = int(first_line)
-    deadline = time.monotonic() + 10
-    while time.monotonic() < deadline:
-        status = liquidsoap_command(f"request.status {request_id}")
-        status_lines = status.splitlines()
-        request_status = status_lines[0].strip().lower() if status_lines else ""
-
-        if request_status == "ready":
-            liquidsoap_command("radio.skip")
-            return request_id
-        if request_status == "playing":
-            return request_id
-        if request_status in {"destroyed", ""}:
-            raise OSError(f"Liquidsoap request {request_id} is {request_status or 'unknown'}")
-
-        time.sleep(0.2)
-
     try:
-        liquidsoap_command(f"next_track.remove_request_id {request_id}")
-    except OSError:
-        pass
-    raise OSError(f"Liquidsoap request {request_id} did not become ready")
+        response = liquidsoap_command(f"next_track.push {path}")
+        first_line = response.splitlines()[0].strip()
+        if not first_line.isdecimal():
+            raise OSError("Liquidsoap did not return a request id")
+        liquidsoap_command("radio.skip")
+        return int(first_line)
+    except ValueError as error:
+        # Liquidsoap control failures are gateway errors, not bad user input.
+        raise OSError(str(error)) from error
 
 
 def track_metadata(path):
