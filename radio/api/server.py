@@ -122,37 +122,6 @@ def liquidsoap_command(command):
     return output
 
 
-def play_next_track(path):
-    """Queue a local track, wait until Liquidsoap can play it, then skip to it."""
-    response = liquidsoap_command(f"next_track.push {path}")
-    first_line = response.splitlines()[0].strip()
-    if not first_line.isdecimal():
-        raise OSError("Liquidsoap did not return a request id")
-
-    request_id = int(first_line)
-    deadline = time.monotonic() + 10
-    while time.monotonic() < deadline:
-        status = liquidsoap_command(f"request.status {request_id}")
-        status_lines = status.splitlines()
-        request_status = status_lines[0].strip().lower() if status_lines else ""
-
-        if request_status == "ready":
-            liquidsoap_command("radio.skip")
-            return request_id
-        if request_status == "playing":
-            return request_id
-        if request_status in {"destroyed", ""}:
-            raise OSError(f"Liquidsoap request {request_id} is {request_status or 'unknown'}")
-
-        time.sleep(0.2)
-
-    try:
-        liquidsoap_command(f"next_track.remove_request_id {request_id}")
-    except OSError:
-        pass
-    raise OSError(f"Liquidsoap request {request_id} did not become ready")
-
-
 def track_metadata(path):
     fallback = {
         "filename": path.name,
@@ -483,8 +452,8 @@ class Handler(BaseHTTPRequestHandler):
                 payload = self.read_json()
                 track = validated_track_path(payload.get("filename"))
                 with CONTROL_LOCK:
-                    request_id = play_next_track(track)
                     issued_at_ms = int(time.time() * 1000)
+                    response = liquidsoap_command(f"next_track.push {track}")
                     publish_playback_command(
                         "play-next",
                         playback_target(track),
@@ -496,6 +465,7 @@ class Handler(BaseHTTPRequestHandler):
             except OSError:
                 self.fail(HTTPStatus.BAD_GATEWAY, "Liquidsoap control is unavailable")
                 return
+            request_id = response.splitlines()[0].strip()
             self.send_json(
                 HTTPStatus.ACCEPTED,
                 {
