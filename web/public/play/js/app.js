@@ -23,9 +23,10 @@
   const config = window.MUSIC_CONFIG;
   let apiBase = null;
   let tracks = [];
+  let libraryLoading = false;
+  let libraryPollTimer = null;
   let currentDisplay = "";
   let actionInProgress = false;
-  let metadataTrack = null;
   let metadataArtist = "";
   let metadataTitle = "";
   let metadataHls = null;
@@ -105,24 +106,47 @@
     currentDisplay = metadataArtist && metadataTitle
       ? `${metadataArtist} — ${metadataTitle}`
       : metadataTitle || metadataArtist;
+    if (currentTrack.textContent === currentDisplay) return;
     currentTrack.textContent = currentDisplay || "-";
     renderLibrary();
   }
 
-  function processMetadataTrack(track) {
-    if (!track || track === metadataTrack) return;
-    if (track.kind !== "metadata" && track.label !== "id3") return;
-    metadataTrack = track;
-    track.mode = "hidden";
-    track.addEventListener("cuechange", () => {
-      for (const cue of track.activeCues || []) {
-        let frame = cue.value || null;
-        if (!frame && typeof cue.text === "string") {
-          try { frame = JSON.parse(cue.text); } catch (_) { /* Ignore non-JSON cue text. */ }
-        }
-        applyMetadata(frame);
+  function decodeId3Text(bytes) {
+    if (!bytes.length) return "";
+    const encoding = bytes[0];
+    let decoder;
+    let payload = bytes.subarray(1);
+    if (encoding === 1) {
+      decoder = new TextDecoder("utf-16");
+    } else if (encoding === 2) {
+      decoder = new TextDecoder("utf-16be");
+    } else if (encoding === 3) {
+      decoder = new TextDecoder("utf-8");
+    } else {
+      decoder = new TextDecoder("windows-1252");
+    }
+    return decoder.decode(payload).replace(/[\u0000\uFFFD]+$/g, "").trim();
+  }
+
+  function parseId3Tag(input) {
+    const bytes = input instanceof Uint8Array ? input : new Uint8Array(input || []);
+    if (bytes.length < 10 || bytes[0] !== 0x49 || bytes[1] !== 0x44 || bytes[2] !== 0x33) return;
+    const version = bytes[3];
+    const tagSize = ((bytes[6] & 0x7f) << 21) | ((bytes[7] & 0x7f) << 14) | ((bytes[8] & 0x7f) << 7) | (bytes[9] & 0x7f);
+    const end = Math.min(bytes.length, 10 + tagSize);
+    let offset = 10;
+    while (offset + 10 <= end) {
+      const id = String.fromCharCode(...bytes.subarray(offset, offset + 4));
+      if (!/^[A-Z0-9]{4}$/.test(id)) break;
+      const size = version >= 4
+        ? ((bytes[offset + 4] & 0x7f) << 21) | ((bytes[offset + 5] & 0x7f) << 14) | ((bytes[offset + 6] & 0x7f) << 7) | (bytes[offset + 7] & 0x7f)
+        : (bytes[offset + 4] * 0x1000000) + (bytes[offset + 5] << 16) + (bytes[offset + 6] << 8) + bytes[offset + 7];
+      if (size <= 0 || offset + 10 + size > end) break;
+      if (id === "TIT2" || id === "TPE1") {
+        applyMetadata({ key: id, data: decodeId3Text(bytes.subarray(offset + 10, offset + 10 + size)) });
       }
-    });
+      offset += 10 + size;
+    }
   }
 
   function startMetadataReader() {
@@ -132,11 +156,12 @@
     }
     metadataAudio.muted = true;
     metadataAudio.volume = 0;
-    metadataAudio.textTracks.addEventListener("addtrack", (event) => processMetadataTrack(event.track));
-    metadataHls = new Hls({ enableID3MetadataCues: true, enableWorker: true, lowLatencyMode: false, maxBufferLength: 15, maxMaxBufferLength: 30 });
-    metadataHls.on(Hls.Events.MEDIA_ATTACHED, () => metadataHls.loadSource(`${config.hlsBasePath}/index.m3u8`));
+    metadataHls = new Hls({ enableID3MetadataCues: false, enableWorker: true, lowLatencyMode: false, liveSyncDuration: 2, liveMaxLatencyDuration: 6, maxBufferLength: 8, maxMaxBufferLength: 16 });
+    metadataHls.on(Hls.Events.MEDIA_ATTACHED, () => metadataHls.loadSource(`${config.hlsBasePath}/aac.m3u8`));
+    metadataHls.on(Hls.Events.FRAG_PARSING_METADATA, (_event, data) => {
+      for (const sample of data.samples || []) parseId3Tag(sample.data);
+    });
     metadataHls.on(Hls.Events.MANIFEST_PARSED, () => {
-      for (const track of metadataAudio.textTracks) processMetadataTrack(track);
       metadataAudio.play().catch((error) => console.warn("Metadata reader could not start:", error));
     });
     metadataHls.on(Hls.Events.ERROR, (_event, data) => {
@@ -195,7 +220,9 @@
       empty.textContent =
         trackSearch.value
           ? "no matches"
-          : "library is empty";
+          : libraryLoading
+            ? "loading library..."
+            : "library is empty";
 
       trackList.append(
         empty
@@ -314,6 +341,8 @@
   }
 
   async function refreshLibrary() {
+    clearTimeout(libraryPollTimer);
+    libraryPollTimer = null;
     await ensureApi();
 
     const payload =
@@ -327,8 +356,17 @@
       )
         ? payload.tracks
         : [];
+    libraryLoading = payload.loading === true;
 
     renderLibrary();
+
+    if (payload.loading) {
+      libraryPollTimer = setTimeout(() => {
+        refreshLibrary().catch((error) => {
+          setStatus(`LIBRARY ERROR: ${error.message}`);
+        });
+      }, 1000);
+    }
   }
 
   async function playNext(

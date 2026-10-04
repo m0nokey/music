@@ -6,6 +6,7 @@ import re
 import socket
 import subprocess
 import tempfile
+from concurrent.futures import ThreadPoolExecutor
 import threading
 import uuid
 from http import HTTPStatus
@@ -27,6 +28,9 @@ TRACK_FILE_RE = re.compile(r"^[A-Za-z0-9_-]{1,128}\.m4a$")
 MAX_TRACKS = 500
 MAX_CONTROL_RESPONSE = 64 * 1024
 CONTROL_LOCK = threading.Lock()
+TRACK_CACHE_LOCK = threading.Lock()
+TRACK_CACHE = {}
+TRACK_SCAN_RUNNING = False
 
 
 def valid_uuid4(value):
@@ -160,18 +164,126 @@ def track_metadata(path):
     }
 
 
-def list_tracks():
-    tracks = []
+def track_inventory():
+    files = []
     for path in sorted(MUSIC_DIR.glob("*.m4a"), key=lambda item: item.name):
-        if len(tracks) >= MAX_TRACKS:
+        if len(files) >= MAX_TRACKS:
             break
-        if path.is_symlink() or not path.is_file() or not TRACK_FILE_RE.fullmatch(path.name):
+        try:
+            if path.is_symlink() or not TRACK_FILE_RE.fullmatch(path.name):
+                continue
+            info = path.stat()
+        except FileNotFoundError:
             continue
-        metadata = track_metadata(path)
-        if metadata:
-            tracks.append(metadata)
+        if not path.is_file():
+            continue
+        files.append((path, info.st_size, info.st_mtime_ns))
+    return files
+
+
+def save_track_cache():
+    with TRACK_CACHE_LOCK:
+        snapshot = dict(TRACK_CACHE)
+    try:
+        atomic_json(STATE_DIR / ".library-cache.json", snapshot)
+    except OSError:
+        # The in-memory cache remains useful if persistent cache writes fail.
+        pass
+
+
+def scan_track_inventory():
+    global TRACK_SCAN_RUNNING
+    try:
+        while True:
+            inventory = track_inventory()
+            with TRACK_CACHE_LOCK:
+                cached = dict(TRACK_CACHE)
+            pending = [
+                item for item in inventory
+                if item[0].name not in cached
+                or cached[item[0].name].get("size") != item[1]
+                or cached[item[0].name].get("mtime_ns") != item[2]
+            ]
+
+            if pending:
+                with ThreadPoolExecutor(max_workers=4) as pool:
+                    results = pool.map(lambda item: track_metadata(item[0]), pending)
+                    updates = {}
+                    for item, metadata in zip(pending, results):
+                        updates[item[0].name] = {
+                            "size": item[1],
+                            "mtime_ns": item[2],
+                            "metadata": metadata,
+                        }
+                with TRACK_CACHE_LOCK:
+                    TRACK_CACHE.update(updates)
+
+            current_names = {item[0].name for item in inventory}
+            with TRACK_CACHE_LOCK:
+                TRACK_CACHE_KEYS = set(TRACK_CACHE)
+                for name in TRACK_CACHE_KEYS - current_names:
+                    TRACK_CACHE.pop(name, None)
+            save_track_cache()
+
+            latest = track_inventory()
+            if [(p.name, size, mtime) for p, size, mtime in latest] == [
+                (p.name, size, mtime) for p, size, mtime in inventory
+            ]:
+                break
+    finally:
+        with TRACK_CACHE_LOCK:
+            TRACK_SCAN_RUNNING = False
+
+
+def list_tracks():
+    global TRACK_SCAN_RUNNING
+    inventory = track_inventory()
+    with TRACK_CACHE_LOCK:
+        cached = dict(TRACK_CACHE)
+        if not TRACK_SCAN_RUNNING:
+            needs_scan = any(
+                path.name not in cached
+                or cached[path.name].get("size") != size
+                or cached[path.name].get("mtime_ns") != mtime_ns
+                for path, size, mtime_ns in inventory
+            )
+            if needs_scan:
+                TRACK_SCAN_RUNNING = True
+                threading.Thread(target=scan_track_inventory, daemon=True).start()
+        loading = TRACK_SCAN_RUNNING
+
+    tracks = []
+    for path, size, mtime_ns in inventory:
+        entry = cached.get(path.name)
+        if entry and entry.get("size") == size and entry.get("mtime_ns") == mtime_ns:
+            tracks.append(entry["metadata"])
+        else:
+            tracks.append({
+                "filename": path.name,
+                "artist": "",
+                "title": "",
+                "display": path.stem,
+            })
     tracks.sort(key=lambda item: item["display"].casefold())
-    return tracks
+    return tracks, loading
+
+
+def load_track_cache():
+    try:
+        payload = json.loads((STATE_DIR / ".library-cache.json").read_text(encoding="utf-8"))
+    except (OSError, json.JSONDecodeError):
+        return
+    if not isinstance(payload, dict):
+        return
+    with TRACK_CACHE_LOCK:
+        for name, entry in payload.items():
+            if (
+                isinstance(name, str)
+                and TRACK_FILE_RE.fullmatch(name)
+                and isinstance(entry, dict)
+                and isinstance(entry.get("metadata"), dict)
+            ):
+                TRACK_CACHE[name] = entry
 
 
 def validated_track_path(filename):
@@ -228,11 +340,11 @@ class Handler(BaseHTTPRequestHandler):
         tracks_path = f"/v1/{API_UUID}/tracks"
         if path == tracks_path:
             try:
-                tracks = list_tracks()
+                tracks, loading = list_tracks()
             except (OSError, subprocess.SubprocessError):
                 self.fail(HTTPStatus.SERVICE_UNAVAILABLE, "Track library is unavailable")
                 return
-            self.send_json(HTTPStatus.OK, {"tracks": tracks})
+            self.send_json(HTTPStatus.OK, {"tracks": tracks, "loading": loading})
             return
 
         prefix = f"/v1/{API_UUID}/jobs/"
@@ -343,6 +455,7 @@ def main():
         raise SystemExit("RADIO_API_UUID must be a UUID v4")
     QUEUE_DIR.mkdir(parents=True, exist_ok=True)
     STATE_DIR.mkdir(parents=True, exist_ok=True)
+    load_track_cache()
     server = ThreadingHTTPServer(("0.0.0.0", 8080), Handler)
     server.daemon_threads = True
     server.serve_forever()
