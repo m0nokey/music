@@ -26,15 +26,7 @@ radio_source = fallback(
 
 add_skip_command(radio_source)
 
-radio = crossfade(
-  id="radio_crossfade",
-  duration=5.0,
-  fade_in=3.0,
-  fade_out=3.0,
-  radio_source
-)
-
-radio = mksafe(radio)
+radio = mksafe(radio_source)
 
 output.icecast(
   %fdkaac(
