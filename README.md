@@ -24,6 +24,12 @@ Create the data directories `data/{music,queue,incoming,state/jobs,logs/icecast,
 sudo chown -R 10001:10000 data/queue data/incoming data/music data/state
 ```
 
+Liquidsoap runs as UID:GID `100:101` and writes HLS segments to `data/hls`; make that directory writable by Liquidsoap:
+
+```sh
+sudo chown -R 100:101 data/hls
+```
+
 The external Docker network named `edge` must exist and must be shared with the reverse proxy. The downloader container also requires the external network connectivity needed to reach YouTube.
 
 Run from this directory:
