@@ -6,7 +6,6 @@ import re
 import socket
 import subprocess
 import tempfile
-import time
 from concurrent.futures import ThreadPoolExecutor
 import threading
 import uuid
@@ -29,9 +28,6 @@ TRACK_FILE_RE = re.compile(r"^[A-Za-z0-9_-]{1,128}\.m4a$")
 MAX_TRACKS = 500
 MAX_CONTROL_RESPONSE = 64 * 1024
 CONTROL_LOCK = threading.Lock()
-PLAYBACK_COMMAND_LOCK = threading.Lock()
-PLAYBACK_COMMAND_FILE = STATE_DIR / ".playback-command.json"
-PLAYBACK_COMMAND = {"revision": 0, "action": None, "target": None}
 TRACK_CACHE_LOCK = threading.Lock()
 TRACK_CACHE = {}
 TRACK_SCAN_RUNNING = False
@@ -290,60 +286,6 @@ def load_track_cache():
                 TRACK_CACHE[name] = entry
 
 
-def playback_target(path):
-    """Return cached ID3-equivalent tags without delaying the queue command."""
-    try:
-        stat = path.stat()
-    except OSError:
-        return None
-    with TRACK_CACHE_LOCK:
-        entry = TRACK_CACHE.get(path.name)
-        if (
-            not entry
-            or entry.get("size") != stat.st_size
-            or entry.get("mtime_ns") != stat.st_mtime_ns
-        ):
-            return None
-        metadata = entry.get("metadata", {})
-        artist = str(metadata.get("artist", "")).strip()
-        title = str(metadata.get("title", "")).strip()
-    if not artist and not title:
-        return None
-    return {"artist": artist, "title": title}
-
-
-def publish_playback_command(action, target=None, issued_at_ms=None):
-    global PLAYBACK_COMMAND
-    with PLAYBACK_COMMAND_LOCK:
-        event = {
-            "revision": PLAYBACK_COMMAND["revision"] + 1,
-            "action": action,
-            "target": target,
-            "issued_at_ms": issued_at_ms or int(time.time() * 1000),
-        }
-        PLAYBACK_COMMAND = event
-        try:
-            atomic_json(PLAYBACK_COMMAND_FILE, event)
-        except OSError as error:
-            # Keep the live in-memory signal usable if persistence is unavailable.
-            print(f"Could not persist playback command: {error}", flush=True)
-        return event
-
-
-def load_playback_command():
-    global PLAYBACK_COMMAND
-    try:
-        payload = json.loads(PLAYBACK_COMMAND_FILE.read_text(encoding="utf-8"))
-    except (OSError, json.JSONDecodeError):
-        return
-    if (
-        isinstance(payload, dict)
-        and isinstance(payload.get("revision"), int)
-        and payload["revision"] >= 0
-    ):
-        PLAYBACK_COMMAND = payload
-
-
 def validated_track_path(filename):
     if not isinstance(filename, str) or not TRACK_FILE_RE.fullmatch(filename):
         raise ValueError("Invalid track filename")
@@ -405,13 +347,6 @@ class Handler(BaseHTTPRequestHandler):
             self.send_json(HTTPStatus.OK, {"tracks": tracks, "loading": loading})
             return
 
-        command_path = f"/v1/{API_UUID}/playback-command"
-        if path == command_path:
-            with PLAYBACK_COMMAND_LOCK:
-                command = {**PLAYBACK_COMMAND, "server_time_ms": int(time.time() * 1000)}
-            self.send_json(HTTPStatus.OK, command)
-            return
-
         prefix = f"/v1/{API_UUID}/jobs/"
         if not path.startswith(prefix):
             self.fail(HTTPStatus.NOT_FOUND, "not found")
@@ -436,10 +371,7 @@ class Handler(BaseHTTPRequestHandler):
         skip_path = f"/v1/{API_UUID}/skip"
         if path == skip_path:
             try:
-                with CONTROL_LOCK:
-                    issued_at_ms = int(time.time() * 1000)
-                    liquidsoap_command("radio.skip")
-                    publish_playback_command("skip", issued_at_ms=issued_at_ms)
+                liquidsoap_command("radio.skip")
             except (OSError, ValueError):
                 self.fail(HTTPStatus.BAD_GATEWAY, "Liquidsoap control is unavailable")
                 return
@@ -452,13 +384,7 @@ class Handler(BaseHTTPRequestHandler):
                 payload = self.read_json()
                 track = validated_track_path(payload.get("filename"))
                 with CONTROL_LOCK:
-                    issued_at_ms = int(time.time() * 1000)
                     response = liquidsoap_command(f"next_track.push {track}")
-                    publish_playback_command(
-                        "play-next",
-                        playback_target(track),
-                        issued_at_ms,
-                    )
             except (ValueError, json.JSONDecodeError) as error:
                 self.fail(HTTPStatus.BAD_REQUEST, str(error))
                 return
@@ -529,7 +455,6 @@ def main():
     QUEUE_DIR.mkdir(parents=True, exist_ok=True)
     STATE_DIR.mkdir(parents=True, exist_ok=True)
     load_track_cache()
-    load_playback_command()
     server = ThreadingHTTPServer(("0.0.0.0", 8080), Handler)
     server.daemon_threads = True
     server.serve_forever()
