@@ -16,7 +16,13 @@ Copy `.env.example` to `.env`, set a UUIDv4 for `RADIO_API_UUID` (for example, g
 - `secrets/icecast_source_password`
 - `secrets/icecast_admin_password`
 
-Create the data directories `data/{music,queue,incoming,state/jobs,logs/icecast,hls}`. Put AAC-compatible music source files in `data/music`. The worker downloads tracks there as M4A. Ensure the directories are writable by the service UIDs used in the Dockerfiles (or set ownership/permissions appropriately on the host). The external Docker network named `edge` must exist and must be shared with the reverse proxy. The downloader container also requires the external network connectivity needed to reach YouTube.
+Create the data directories `data/{music,queue,incoming,state/jobs,logs/icecast,hls}`. Put AAC-compatible music source files in `data/music`. The worker runs as UID:GID `10001:10000` by default; make its writable bind-mounted directories owned by that ID before first start (adjust IDs in `.env` if needed):
+
+```sh
+sudo chown -R 10001:10000 data/queue data/incoming data/music data/state
+```
+
+The external Docker network named `edge` must exist and must be shared with the reverse proxy. The downloader container also requires the external network connectivity needed to reach YouTube.
 
 Run from this directory:
 

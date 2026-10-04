@@ -38,9 +38,9 @@ services:
       ICECAST_MAX_SOURCES: ${ICECAST_MAX_SOURCES:-1}
     secrets:
       - source: icecast_source_password
-        target: icecast_source_password
+        target: /run/secrets/icecast_source_password
       - source: icecast_admin_password
-        target: icecast_admin_password
+        target: /run/secrets/icecast_admin_password
     volumes:
       - ${MUSIC_CONFIG_DIR:-./radio/config}/icecast.xml.template:/etc/icecast/icecast.xml.template:ro
       - ${MUSIC_DATA_DIR:-./data}/logs/icecast:/var/log/icecast:rw
@@ -142,6 +142,7 @@ services:
       - ${MUSIC_DATA_DIR:-./data}/incoming:/incoming:rw
       - ${MUSIC_DATA_DIR:-./data}/music:/music:rw
       - ${MUSIC_DATA_DIR:-./data}/state:/state:rw
+    user: "${MUSIC_WORKER_UID:-10001}:${MUSIC_WORKER_GID:-10000}"
     networks: [downloader]
     read_only: true
     tmpfs:
