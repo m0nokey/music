@@ -10,7 +10,8 @@ services:
     volumes:
       - ${MUSIC_DATA_DIR:-./data}/hls:/public/live:ro
     read_only: true
-    tmpfs: [/tmp:rw,noexec,nosuid,nodev,size=16m,mode=1777]
+    tmpfs:
+      - /tmp:rw,noexec,nosuid,nodev,size=16m,mode=1777
     security_opt: [no-new-privileges:true]
     cap_drop: [ALL]
     restart: unless-stopped
@@ -49,7 +50,8 @@ services:
         aliases: [icecast-kh]
       radio:
     read_only: true
-    tmpfs: [/tmp:rw,noexec,nosuid,nodev,size=64m,mode=1777]
+    tmpfs:
+      - /tmp:rw,noexec,nosuid,nodev,size=64m,mode=1777
     security_opt: [no-new-privileges:true]
     cap_drop: [ALL]
     restart: unless-stopped
@@ -81,7 +83,8 @@ services:
     expose: ["1234"]
     networks: [radio]
     read_only: true
-    tmpfs: [/tmp:rw,noexec,nosuid,nodev,size=128m,mode=1777]
+    tmpfs:
+      - /tmp:rw,noexec,nosuid,nodev,size=128m,mode=1777
     security_opt: [no-new-privileges:true]
     cap_drop: [ALL]
     cap_add: [CHOWN, SETUID, SETGID]
@@ -110,7 +113,8 @@ services:
         condition: service_healthy
     networks: [edge, radio]
     read_only: true
-    tmpfs: [/tmp:rw,noexec,nosuid,nodev,size=16m,mode=1777]
+    tmpfs:
+      - /tmp:rw,noexec,nosuid,nodev,size=16m,mode=1777
     security_opt: [no-new-privileges:true]
     cap_drop: [ALL]
     restart: unless-stopped
@@ -140,7 +144,8 @@ services:
       - ${MUSIC_DATA_DIR:-./data}/state:/state:rw
     networks: [downloader]
     read_only: true
-    tmpfs: [/tmp:rw,noexec,nosuid,nodev,size=256m,mode=1777]
+    tmpfs:
+      - /tmp:rw,noexec,nosuid,nodev,size=256m,mode=1777
     security_opt: [no-new-privileges:true]
     cap_drop: [ALL]
     restart: unless-stopped
