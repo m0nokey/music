@@ -16,7 +16,7 @@ Copy `.env.example` to `.env`, set a UUIDv4 for `RADIO_API_UUID` (for example, g
 - `secrets/icecast_source_password`
 - `secrets/icecast_admin_password`
 
-The Icecast entrypoint reads these files and then drops to the unprivileged `icecast` account; the host-side file owner does not need to match a container UID.
+The Icecast container runs as UID:GID `10001:10000`. With file-backed Compose secrets, make the files readable to that UID on Linux (for example, `chown 10001:10000 secrets/icecast_*_password && chmod 400 secrets/icecast_*_password`). Compose mounts each secret at `/run/secrets/<secret-name>`.
 
 Create the data directories `data/{music,queue,incoming,state/jobs,logs/icecast,hls}`. Put AAC-compatible music source files in `data/music`. The worker runs as UID:GID `10001:10000` by default; make its writable bind-mounted directories owned by that ID before first start (adjust IDs in `.env` if needed):
 

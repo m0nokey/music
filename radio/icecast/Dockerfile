@@ -55,7 +55,6 @@ RUN apk add --no-cache \
     libxslt \
     openssl \
     speex \
-    su-exec \
     wget \
     && addgroup -g 10000 -S radio \
     && adduser -u 10001 -S -D -H -G radio icecast \
@@ -67,8 +66,6 @@ COPY icecast/entrypoint.sh /usr/local/bin/radio-icecast-entrypoint
 
 RUN chmod 0755 /usr/local/bin/radio-icecast-entrypoint
 
-# The entrypoint reads mounted secret files, prepares config/log permissions,
-# then drops privileges before starting Icecast.
-USER root
+USER icecast
 EXPOSE 8000
 ENTRYPOINT ["/usr/local/bin/radio-icecast-entrypoint"]

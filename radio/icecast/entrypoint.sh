@@ -55,6 +55,4 @@ sed \
     /etc/icecast/icecast.xml.template > "$runtime"
 
 chmod 0600 "$runtime"
-chown icecast:radio "$runtime"
-chown -R icecast:radio /var/log/icecast
-exec su-exec icecast /usr/local/bin/icecast -c "$runtime"
+exec /usr/local/bin/icecast -c "$runtime"

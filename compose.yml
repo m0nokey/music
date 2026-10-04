@@ -30,10 +30,8 @@ services:
       ICECAST_MAX_CLIENTS: ${ICECAST_MAX_CLIENTS:-500}
       ICECAST_MAX_SOURCES: ${ICECAST_MAX_SOURCES:-1}
     secrets:
-      - source: icecast_source_password
-        target: /run/secrets/icecast_source_password
-      - source: icecast_admin_password
-        target: /run/secrets/icecast_admin_password
+      - icecast_source_password
+      - icecast_admin_password
     volumes:
       - ${MUSIC_CONFIG_DIR:-./radio/config}/icecast.xml.template:/etc/icecast/icecast.xml.template:ro
       - ${MUSIC_DATA_DIR:-./data}/logs/icecast:/var/log/icecast:rw
@@ -47,10 +45,9 @@ services:
       - /tmp:rw,noexec,nosuid,nodev,size=64m,mode=1777
     security_opt: [no-new-privileges:true]
     cap_drop: [ALL]
-    cap_add: [CHOWN, DAC_OVERRIDE, SETGID, SETUID]
     restart: unless-stopped
     healthcheck:
-      test: ["CMD-SHELL", "wget -q -O /dev/null http://127.0.0.1:8000/ || exit 1"]
+      test: ["CMD-SHELL", "test -r /proc/1/stat"]
       interval: 30s
       timeout: 5s
       retries: 3
