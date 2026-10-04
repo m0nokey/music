@@ -385,6 +385,7 @@ class Handler(BaseHTTPRequestHandler):
                 track = validated_track_path(payload.get("filename"))
                 with CONTROL_LOCK:
                     response = liquidsoap_command(f"next_track.push {track}")
+                    liquidsoap_command("radio.skip")
             except (ValueError, json.JSONDecodeError) as error:
                 self.fail(HTTPStatus.BAD_REQUEST, str(error))
                 return
