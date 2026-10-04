@@ -1,0 +1,92 @@
+@font-face {
+  font-family: 'FixederSys';
+  src: url('../fonts/FixederSys1x.ttf') format('truetype');
+  font-weight: normal;
+  font-style: normal;
+}
+
+html, body {
+  -webkit-text-size-adjust: none;
+  -moz-text-size-adjust: none;
+  -ms-text-size-adjust: none;
+  text-size-adjust: none;
+  margin: 0;
+  padding: 0;
+  height: 100%;
+}
+
+body {
+  background-color: #1E1E1E;
+  color: #FFF;
+  font-family: 'FixederSys', "Courier New", Courier, monospace;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  padding: 20px;
+  box-sizing: border-box;
+}
+
+.ascii-art {
+  text-align: center;
+  margin-bottom: 2em;
+}
+
+.ascii-art pre {
+  display: inline-block;
+  white-space: pre;
+  font-family: inherit;
+  font-size: 16px;
+  line-height: 1;
+  margin: 0;
+  padding: 0;
+  text-align: left;
+}
+
+#trackName {
+  display: block;
+  text-align: center;
+  font-size: 27px;
+  margin: 1em 0;
+  font-family: 'DotGothic16', monospace;
+}
+
+.player {
+  text-align: center;
+  margin: 1em 0;
+}
+
+audio {
+  width: 16em;
+  padding: 0;
+}
+
+#toggleBtn {
+  background-color: transparent;
+  border: none;
+  color: #FFF;
+  cursor: pointer;
+  font-family: inherit;
+  outline: none;
+  padding: 10px 20px;
+}
+
+.play-symbol {
+  font-size: 45px;
+  line-height: 1;
+}
+
+.pause-symbol {
+  font-size: 50px;
+  line-height: 1;
+}
+
+@media (max-width: 600px) {
+  .ascii-art pre {
+    font-size: 12px;
+  }
+  
+  #trackName {
+    font-size: 20px;
+  }
+}

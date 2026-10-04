@@ -1,0 +1,40 @@
+# Include these locations in the TLS virtual host for your chosen domain.
+# The trailing slash on proxy_pass strips /music/ before forwarding.
+
+location = /music {
+    return 301 /music/;
+}
+
+location ^~ /music/api/ {
+    proxy_pass http://radio-api:8080/;
+    proxy_set_header Host $host;
+    proxy_set_header X-Forwarded-Proto $scheme;
+    proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+    add_header Cache-Control "no-store" always;
+}
+
+location ^~ /music/live/ {
+    proxy_pass http://music-web:8080/live/;
+    proxy_set_header Host $host;
+    add_header Cache-Control "no-store" always;
+    add_header X-Content-Type-Options "nosniff" always;
+}
+
+location = /music/live/state.config {
+    return 404;
+}
+
+location = /music/radio.aac {
+    proxy_pass http://icecast-kh:8000/radio.aac;
+    proxy_http_version 1.1;
+    proxy_buffering off;
+    proxy_read_timeout 1h;
+    proxy_set_header Host $host;
+}
+
+location /music/ {
+    proxy_pass http://music-web:8080/;
+    proxy_set_header Host $host;
+    proxy_set_header X-Forwarded-Proto $scheme;
+    proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+}

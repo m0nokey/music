@@ -1,0 +1,167 @@
+services:
+  music-web:
+    image: ${RADIO_WEB_IMAGE:-local/music-web:dev}
+    build:
+      context: ./web
+    ports:
+      - "127.0.0.1:${MUSIC_WEB_PORT:-8088}:8080"
+    expose: ["8080"]
+    networks: [edge]
+    volumes:
+      - ${MUSIC_DATA_DIR:-./data}/hls:/public/live:ro
+    read_only: true
+    tmpfs: [/tmp:rw,noexec,nosuid,nodev,size=16m,mode=1777]
+    security_opt: [no-new-privileges:true]
+    cap_drop: [ALL]
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD-SHELL", "test -r /proc/1/stat"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 20s
+
+  icecast-kh:
+    image: local/radio-icecast-kh:kh22
+    build:
+      context: ./radio
+      dockerfile: icecast/Dockerfile
+      args:
+        ICECAST_KH_VERSION: ${ICECAST_KH_VERSION:-icecast-2.4.0-kh22}
+    environment:
+      TZ: ${RADIO_TIMEZONE:-Etc/UTC}
+      ICECAST_HOSTNAME: ${ICECAST_HOSTNAME:-localhost}
+      ICECAST_STREAM_URL: ${ICECAST_STREAM_URL:-http://localhost:8000/radio.aac}
+      ICECAST_ADMIN_EMAIL: ${ICECAST_ADMIN_EMAIL:-admin@localhost}
+      ICECAST_MAX_CLIENTS: ${ICECAST_MAX_CLIENTS:-500}
+      ICECAST_MAX_SOURCES: ${ICECAST_MAX_SOURCES:-1}
+    secrets:
+      - source: icecast_source_password
+        target: icecast_source_password
+      - source: icecast_admin_password
+        target: icecast_admin_password
+    volumes:
+      - ${MUSIC_CONFIG_DIR:-./radio/config}/icecast.xml.template:/etc/icecast/icecast.xml.template:ro
+      - ${MUSIC_DATA_DIR:-./data}/logs/icecast:/var/log/icecast:rw
+    expose: ["8000"]
+    networks:
+      edge:
+        aliases: [icecast-kh]
+      radio:
+    read_only: true
+    tmpfs: [/tmp:rw,noexec,nosuid,nodev,size=64m,mode=1777]
+    security_opt: [no-new-privileges:true]
+    cap_drop: [ALL]
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD-SHELL", "test -r /proc/1/stat"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 20s
+    healthcheck:
+      test: ["CMD-SHELL", "test -r /proc/1/stat"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 20s
+
+  liquidsoap:
+    image: local/radio-liquidsoap:2.4.5
+    build:
+      context: ./radio
+      dockerfile: liquidsoap/Dockerfile
+      args:
+        LIQUIDSOAP_IMAGE: ${LIQUIDSOAP_IMAGE:-ghcr.io/savonet/liquidsoap-alpine:v2.4.5}
+    environment:
+      TZ: ${RADIO_TIMEZONE:-Etc/UTC}
+      HOME: /tmp
+    secrets: [icecast_source_password]
+    volumes:
+      - ${MUSIC_CONFIG_DIR:-./radio/config}/liquidsoap.liq:/etc/liquidsoap/radio.liq.template:ro
+      - ${MUSIC_DATA_DIR:-./data}/music:/music:ro
+      - ${MUSIC_DATA_DIR:-./data}/hls:/hls:rw
+    depends_on:
+      icecast-kh:
+        condition: service_healthy
+    expose: ["1234"]
+    networks: [radio]
+    read_only: true
+    tmpfs: [/tmp:rw,noexec,nosuid,nodev,size=128m,mode=1777]
+    security_opt: [no-new-privileges:true]
+    cap_drop: [ALL]
+    cap_add: [CHOWN, SETUID, SETGID]
+    restart: unless-stopped
+
+  radio-api:
+    image: local/radio-api:latest
+    build:
+      context: ./radio
+      dockerfile: api/Dockerfile
+    environment:
+      TZ: ${RADIO_TIMEZONE:-Etc/UTC}
+      RADIO_API_UUID: ${RADIO_API_UUID:?Set RADIO_API_UUID in .env}
+      RADIO_QUEUE_DIR: /queue/new
+      RADIO_STATE_DIR: /state/jobs
+      LIQUIDSOAP_CONTROL_HOST: liquidsoap
+      LIQUIDSOAP_CONTROL_PORT: "1234"
+      RADIO_MUSIC_DIR: /music
+    volumes:
+      - ${MUSIC_DATA_DIR:-./data}/queue:/queue:rw
+      - ${MUSIC_DATA_DIR:-./data}/state/jobs:/state/jobs:rw
+      - ${MUSIC_DATA_DIR:-./data}/music:/music:ro
+    expose: ["8080"]
+    depends_on:
+      icecast-kh:
+        condition: service_healthy
+    networks: [edge, radio]
+    read_only: true
+    tmpfs: [/tmp:rw,noexec,nosuid,nodev,size=16m,mode=1777]
+    security_opt: [no-new-privileges:true]
+    cap_drop: [ALL]
+    restart: unless-stopped
+
+  radio-worker:
+    image: local/radio-ytdlp:alpine
+    build:
+      context: ./radio
+      dockerfile: ytdlp/Dockerfile
+    environment:
+      TZ: ${RADIO_TIMEZONE:-Etc/UTC}
+      HOME: /tmp
+      RADIO_MAX_PLAYLIST_ITEMS: ${RADIO_MAX_PLAYLIST_ITEMS:-100}
+      RADIO_MAX_VIDEO_SECONDS: ${RADIO_MAX_VIDEO_SECONDS:-13200}
+      RADIO_JOB_TIMEOUT_SECONDS: ${RADIO_JOB_TIMEOUT_SECONDS:-14400}
+      RADIO_POLL_SECONDS: ${RADIO_POLL_SECONDS:-2}
+      RADIO_QUEUE_NEW: /queue/new
+      RADIO_QUEUE_PROCESSING: /queue/processing
+      RADIO_QUEUE_FAILED: /queue/failed
+      RADIO_INCOMING_DIR: /incoming
+      RADIO_MUSIC_DIR: /music
+      RADIO_STATE_DIR: /state
+    volumes:
+      - ${MUSIC_DATA_DIR:-./data}/queue:/queue:rw
+      - ${MUSIC_DATA_DIR:-./data}/incoming:/incoming:rw
+      - ${MUSIC_DATA_DIR:-./data}/music:/music:rw
+      - ${MUSIC_DATA_DIR:-./data}/state:/state:rw
+    networks: [downloader]
+    read_only: true
+    tmpfs: [/tmp:rw,noexec,nosuid,nodev,size=256m,mode=1777]
+    security_opt: [no-new-privileges:true]
+    cap_drop: [ALL]
+    restart: unless-stopped
+
+networks:
+  edge:
+    external: true
+  radio:
+    driver: bridge
+    internal: true
+  downloader:
+    driver: bridge
+
+secrets:
+  icecast_source_password:
+    file: ${MUSIC_SECRETS_DIR:-./secrets}/icecast_source_password
+  icecast_admin_password:
+    file: ${MUSIC_SECRETS_DIR:-./secrets}/icecast_admin_password

@@ -1,0 +1,11 @@
+.git
+.env
+.env.*
+!.env.example
+data/
+secrets/
+**/__pycache__/
+**/*.pyc
+**/*.log
+public/*.before-*
+public/js/*.before-*

@@ -1,0 +1,79 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <title>Radio Control</title>
+  <link rel="stylesheet" href="./css/admin.css?v=1">
+  <link rel="stylesheet" href="../css/dotgothic16.css?v=2">
+</head>
+<body>
+  <main class="terminal">
+    <header class="header">
+      <div class="header-line"><span class="prompt">root@radio:~$</span> control</div>
+    </header>
+
+    <section class="section">
+      <h1 class="section-title">NOW PLAYING</h1>
+      <div class="rule"></div>
+      <div class="now-playing">
+        <div class="now-main">
+          <div class="now-label">CURRENT STREAM</div>
+          <div id="current-track">-</div>
+        </div>
+        <button id="skip" class="terminal-button" type="button">SKIP</button>
+      </div>
+    </section>
+
+    <section class="section">
+      <h2 class="section-title">LIBRARY</h2>
+      <div class="rule"></div>
+      <div class="library-toolbar">
+        <label class="search-wrap">
+          <span class="search-prefix">/</span>
+          <input id="track-search" type="search" autocomplete="off" spellcheck="false" placeholder="search">
+        </label>
+        <div id="track-count">loading...</div>
+      </div>
+      <div id="track-list" class="track-list" aria-label="Track library">
+        <div class="empty">loading library...</div>
+      </div>
+    </section>
+
+    <section class="section">
+      <h2 class="section-title">ADD YOUTUBE</h2>
+      <div class="rule"></div>
+      <form id="download-form">
+        <div class="form-row">
+          <label class="form-label" for="url">URL</label>
+          <input id="url" class="terminal-input" name="url" type="url" required maxlength="2048" autocomplete="off" spellcheck="false" placeholder="https://www.youtube.com/watch?v=...">
+        </div>
+
+        <div class="form-row">
+          <div class="form-label">MODE</div>
+          <div class="mode-select" id="mode-select">
+            <button id="mode-trigger" class="mode-trigger" type="button" aria-haspopup="listbox" aria-expanded="false">
+              <span class="mode-prefix">&gt;</span>
+              <span id="mode-value">AUTOMATIC</span>
+              <span class="mode-arrow">v</span>
+            </button>
+            <div id="mode-menu" class="mode-menu" role="listbox" hidden>
+              <button type="button" class="mode-option is-selected" role="option" aria-selected="true" data-value="auto">AUTOMATIC</button>
+              <button type="button" class="mode-option" role="option" aria-selected="false" data-value="single">SINGLE TRACK</button>
+              <button type="button" class="mode-option" role="option" aria-selected="false" data-value="playlist">PLAYLIST</button>
+            </div>
+            <input id="mode" name="mode" type="hidden" value="auto">
+          </div>
+        </div>
+
+        <button id="submit" class="terminal-button" type="submit">ADD</button>
+      </form>
+      <p id="status" role="status"></p>
+    </section>
+  </main>
+  <audio id="metadata-audio" hidden muted playsinline preload="none"></audio>
+  <script src="../config.js" defer></script>
+  <script src="../js/vendor/hls.min.js" defer></script>
+  <script src="./js/app.js?v=2" defer></script>
+</body>
+</html>

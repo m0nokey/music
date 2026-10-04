@@ -1,0 +1,14 @@
+.git
+.env
+.env.*
+!.env.example
+data/
+secrets/
+**/__pycache__/
+**/*.pyc
+**/*.log
+nginx/
+radio/.env*
+radio/secrets/
+radio/data/
+radio/logs/
