@@ -108,6 +108,8 @@ services:
       - "1234"
     networks:
       - radio
+    group_add:
+      - "10000"
     read_only: true
     tmpfs:
       - /tmp:rw,noexec,nosuid,nodev,size=128m,mode=1777
