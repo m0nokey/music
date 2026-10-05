@@ -21,6 +21,11 @@
   const modeOptions = [...document.querySelectorAll(".mode-option")];
 
   const config = window.MUSIC_CONFIG;
+  const authGate = document.getElementById("auth-gate");
+  const authForm = document.getElementById("auth-form");
+  const adminPassword = document.getElementById("admin-password");
+  const authMessage = document.getElementById("auth-message");
+  const adminApp = document.getElementById("admin-app");
   let apiBase = null;
   let tracks = [];
   let libraryLoading = false;
@@ -65,10 +70,17 @@
     }
 
     if (!response.ok) {
-      throw new Error(
+      const error = new Error(
         payload.error ||
         `HTTP ${response.status}`
       );
+      error.status = response.status;
+      error.attemptsRemaining = payload.attempts_remaining;
+      error.retryAfter = payload.retry_after;
+      if (response.status === 401 && !requestUrl.pathname.endsWith("/auth/login")) {
+        showAuth("session expired — enter password");
+      }
+      throw error;
     }
 
     return payload;
@@ -86,6 +98,20 @@
     if (!apiBase) {
       await bootstrap();
     }
+  }
+
+  function showAuth(message = "") {
+    authGate.hidden = false;
+    adminApp.hidden = true;
+    authMessage.textContent = message;
+    if (!adminPassword.disabled) adminPassword.focus();
+  }
+
+  function showAdmin() {
+    authGate.hidden = true;
+    adminApp.hidden = false;
+    startMetadataReader();
+    refreshLibrary().catch((error) => setStatus(`LIBRARY ERROR: ${error.message}`));
   }
 
   function metadataText(value) {
@@ -679,19 +705,41 @@
     }
   );
 
-  bootstrap()
-    .then(
-      refreshLibrary
-    )
-    .catch(
-      (error) => {
-        setStatus(
-          `API ERROR: ${
-            error.message
-          }`
-        );
-      }
-    );
+  authForm.addEventListener("submit", async (event) => {
+    event.preventDefault();
+    adminPassword.disabled = true;
+    authMessage.textContent = "checking...";
+    try {
+      await ensureApi();
+      await jsonRequest(`${config.apiBasePath}/auth/login`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ password: adminPassword.value })
+      });
+      adminPassword.value = "";
+      showAdmin();
+    } catch (error) {
+      const lockMessage = error.retryAfter
+        ? `locked — try again in ${Math.ceil(error.retryAfter / 60)} min`
+        : error.attemptsRemaining !== undefined
+          ? `${error.message} · ${error.attemptsRemaining} attempts left`
+          : error.message;
+      authMessage.textContent = lockMessage;
+    } finally {
+      adminPassword.disabled = false;
+      if (!adminApp.hidden) adminPassword.blur();
+      else adminPassword.focus();
+    }
+  });
 
-  startMetadataReader();
+  (async () => {
+    try {
+      await bootstrap();
+      await jsonRequest(`${config.apiBasePath}/auth/session`);
+      showAdmin();
+    } catch (error) {
+      showAuth(error.status === 401 ? "password" : error.message);
+    }
+  })();
+
 })();

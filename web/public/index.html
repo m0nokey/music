@@ -12,9 +12,49 @@
   <link href="icons/favicon.ico" rel="shortcut icon" type="image/x-icon">
   <link rel="stylesheet" href="css/main.css">
   <link rel="stylesheet" href="css/dotgothic16.css?v=2">
+  <link rel="stylesheet" href="css/library.css?v=1">
 </head>
 
 <body>
+  <main class="music-app">
+    <section id="home-view">
+      <header class="music-heading">
+        <pre class="brand-art">♫  MUSIC / RADIO  ♫</pre>
+        <p>SELECT A CHANNEL</p>
+      </header>
+      <div id="playlist-grid" class="playlist-grid" aria-live="polite">
+        <div class="grid-loading">loading playlists...</div>
+      </div>
+    </section>
+
+    <section id="playlist-view" hidden>
+      <button id="playlist-back" class="text-button" type="button">← ALL PLAYLISTS</button>
+      <div class="playlist-heading">
+        <pre id="playlist-art" class="playlist-art"></pre>
+        <div>
+          <p class="eyebrow">PLAYLIST</p>
+          <h1 id="playlist-title"></h1>
+          <p id="playlist-summary" class="muted"></p>
+        </div>
+      </div>
+      <div class="playlist-controls">
+        <button id="playlist-toggle" class="round-play" type="button" aria-label="Play playlist">▶</button>
+        <button id="repeat-mode" class="text-button" type="button">REPEAT: OFF</button>
+        <button id="shuffle-mode" class="text-button" type="button" aria-pressed="false">SHUFFLE: OFF</button>
+        <span id="playlist-total" class="muted"></span>
+      </div>
+      <div class="timeline">
+        <span id="elapsed-time">0:00</span>
+        <input id="seek-track" type="range" min="0" max="1000" value="0" aria-label="Seek track">
+        <span id="remaining-time">0:00</span>
+      </div>
+      <div class="track-heading"><span>#</span><span>TITLE</span><span>TIME</span></div>
+      <ol id="playlist-tracks" class="playlist-tracks"></ol>
+      <div id="playlist-error" class="muted" role="status"></div>
+    </section>
+
+    <section id="live-view" hidden>
+      <button id="live-back" class="text-button" type="button">← ALL PLAYLISTS</button>
   <div class="ascii-art">
     <pre>                                         _.oo.
                  _.u[[/;:,.         .odMMMMMM'
@@ -37,8 +77,12 @@ YMMMUP^
   <button id="toggleBtn" type="button" aria-label="Play" aria-pressed="false">
     <span class="play-symbol">►</span>
   </button>
+    </section>
+  </main>
+  <audio id="playlist-audio" preload="none"></audio>
   <script src="config.js?v=1"></script>
   <script src="js/vendor/hls.min.js?v=2"></script>
   <script src="js/player.js?v=4" defer></script>
+  <script src="js/library.js?v=1" defer></script>
 </body>
 </html>
