@@ -4,18 +4,16 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width,initial-scale=1">
   <title>Radio Control</title>
-  <link rel="stylesheet" href="./css/admin.css?v=1">
+  <link rel="stylesheet" href="./css/admin.css?v=2">
   <link rel="stylesheet" href="../css/dotgothic16.css?v=2">
 </head>
 <body>
   <section id="auth-gate" class="auth-gate" aria-label="Control panel sign in">
     <div class="auth-box">
-      <div class="header-line"><span class="prompt">root@radio:~$</span> authenticate</div>
       <form id="auth-form" autocomplete="on">
         <label class="visually-hidden" for="admin-password">Password</label>
-        <input id="admin-password" class="auth-input" type="password" name="password" autocomplete="current-password" placeholder="password" required minlength="12" autofocus>
+        <input id="admin-password" class="auth-input terminal-input" type="password" name="password" autocomplete="current-password" placeholder="enter password" required>
       </form>
-      <p id="auth-message" role="status" aria-live="polite"></p>
     </div>
   </section>
 
@@ -85,6 +83,6 @@
   <audio id="metadata-audio" hidden muted playsinline preload="none"></audio>
   <script src="../config.js" defer></script>
   <script src="../js/vendor/hls.min.js" defer></script>
-  <script src="./js/app.js?v=4" defer></script>
+  <script src="./js/app.js?v=5" defer></script>
 </body>
 </html>

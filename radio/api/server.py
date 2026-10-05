@@ -40,6 +40,8 @@ CONTROL_LOCK = threading.Lock()
 TRACK_CACHE_LOCK = threading.Lock()
 TRACK_CACHE = {}
 TRACK_SCAN_RUNNING = False
+TRACK_SCAN_LAST_STARTED = 0.0
+TRACK_INVENTORY = []
 DB_POOL = None
 ADMIN_PASSWORD_FILE = Path(os.environ.get("RADIO_ADMIN_PASSWORD_FILE", "/run/secrets/music_admin_password"))
 ADMIN_SESSION_SECONDS = 12 * 60 * 60
@@ -377,32 +379,44 @@ def scan_track_inventory():
             if [(p.name, size, mtime) for p, size, mtime in latest] == [
                 (p.name, size, mtime) for p, size, mtime in inventory
             ]:
+                global TRACK_INVENTORY
+                with TRACK_CACHE_LOCK:
+                    TRACK_INVENTORY = inventory
                 break
     finally:
         with TRACK_CACHE_LOCK:
             TRACK_SCAN_RUNNING = False
 
 
-def list_tracks():
-    global TRACK_SCAN_RUNNING
-    inventory = track_inventory()
-    inventory_names = {path.name for path, _size, _mtime_ns in inventory}
+def start_track_scan():
+    global TRACK_SCAN_RUNNING, TRACK_SCAN_LAST_STARTED
+    now = time.monotonic()
     with TRACK_CACHE_LOCK:
-        cached = dict(TRACK_CACHE)
-        if not TRACK_SCAN_RUNNING:
-            needs_scan = (
-                any(
-                    path.name not in cached
-                    or cached[path.name].get("size") != size
-                    or cached[path.name].get("mtime_ns") != mtime_ns
-                    for path, size, mtime_ns in inventory
-                )
-                or any(name not in inventory_names for name in cached)
-            )
-            if needs_scan:
-                TRACK_SCAN_RUNNING = True
-                threading.Thread(target=scan_track_inventory, daemon=True).start()
+        if TRACK_SCAN_RUNNING or now - TRACK_SCAN_LAST_STARTED < 2:
+            return
+        TRACK_SCAN_RUNNING = True
+        TRACK_SCAN_LAST_STARTED = now
+    threading.Thread(target=scan_track_inventory, daemon=True).start()
+
+
+def watch_track_inventory():
+    global TRACK_INVENTORY
+    while True:
+        time.sleep(2)
+        latest = track_inventory()
+        with TRACK_CACHE_LOCK:
+            previous_signature = [(path.name, size, mtime) for path, size, mtime in TRACK_INVENTORY]
+            latest_signature = [(path.name, size, mtime) for path, size, mtime in latest]
+            changed = previous_signature != latest_signature
+        if changed:
+            start_track_scan()
+
+
+def list_tracks():
+    with TRACK_CACHE_LOCK:
+        inventory = list(TRACK_INVENTORY)
         loading = TRACK_SCAN_RUNNING
+    inventory_names = {path.name for path, _size, _mtime_ns in inventory}
 
     tracks_by_filename = {}
     with database_connection() as connection:
@@ -419,7 +433,8 @@ def list_tracks():
                     float(duration) if duration is not None else None,
                 )
 
-    for path, size, mtime_ns in inventory:
+    # Initial filenames are available immediately; ffprobe runs asynchronously.
+    for path, _size, _mtime_ns in inventory:
         if path.name not in tracks_by_filename:
             tracks_by_filename[path.name] = display_track(path.name, "", "", None)
     tracks = list(tracks_by_filename.values())
@@ -951,6 +966,10 @@ def main():
     STATE_DIR.mkdir(parents=True, exist_ok=True)
     initialize_database()
     load_track_cache()
+    global TRACK_INVENTORY
+    TRACK_INVENTORY = track_inventory()
+    start_track_scan()
+    threading.Thread(target=watch_track_inventory, daemon=True).start()
     server = ThreadingHTTPServer(("0.0.0.0", 8080), Handler)
     server.daemon_threads = True
     server.serve_forever()

@@ -24,7 +24,6 @@
   const authGate = document.getElementById("auth-gate");
   const authForm = document.getElementById("auth-form");
   const adminPassword = document.getElementById("admin-password");
-  const authMessage = document.getElementById("auth-message");
   const adminApp = document.getElementById("admin-app");
   let apiBase = null;
   let tracks = [];
@@ -78,7 +77,7 @@
       error.attemptsRemaining = payload.attempts_remaining;
       error.retryAfter = payload.retry_after;
       if (response.status === 401 && !requestUrl.pathname.endsWith("/auth/login")) {
-        showAuth("session expired — enter password");
+        showAuth();
       }
       throw error;
     }
@@ -100,11 +99,9 @@
     }
   }
 
-  function showAuth(message = "") {
+  function showAuth() {
     authGate.hidden = false;
     adminApp.hidden = true;
-    authMessage.textContent = message;
-    if (!adminPassword.disabled) adminPassword.focus();
   }
 
   function showAdmin() {
@@ -708,7 +705,6 @@
   authForm.addEventListener("submit", async (event) => {
     event.preventDefault();
     adminPassword.disabled = true;
-    authMessage.textContent = "checking...";
     try {
       await ensureApi();
       await jsonRequest(`${config.apiBasePath}/auth/login`, {
@@ -719,12 +715,7 @@
       adminPassword.value = "";
       showAdmin();
     } catch (error) {
-      const lockMessage = error.retryAfter
-        ? `locked — try again in ${Math.ceil(error.retryAfter / 60)} min`
-        : error.attemptsRemaining !== undefined
-          ? `${error.message} · ${error.attemptsRemaining} attempts left`
-          : error.message;
-      authMessage.textContent = lockMessage;
+      // Keep the gate visually minimal; the server still enforces lockout.
     } finally {
       adminPassword.disabled = false;
       if (!adminApp.hidden) adminPassword.blur();
