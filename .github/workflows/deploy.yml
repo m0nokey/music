@@ -1,0 +1,23 @@
+name: Deploy Music
+
+on:
+  push:
+    branches:
+      - main
+
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: music-deploy
+  cancel-in-progress: false
+
+jobs:
+  deploy:
+    runs-on: [self-hosted, linux, music-deploy]
+
+    steps:
+      - name: Deploy Music
+        run: sudo -n /usr/local/sbin/deploy-music
