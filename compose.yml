@@ -1,4 +1,26 @@
 services:
+  postgres:
+    image: postgres:18.6-alpine
+    environment:
+      POSTGRES_DB: ${POSTGRES_DB:-music}
+      POSTGRES_USER: ${POSTGRES_USER:-music}
+      POSTGRES_PASSWORD_FILE: /run/secrets/postgres_password
+    secrets:
+      - postgres_password
+    volumes:
+      - ${MUSIC_DATA_DIR:-./data}/postgres:/var/lib/postgresql
+    expose:
+      - "5432"
+    networks:
+      - radio
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U $${POSTGRES_USER} -d $${POSTGRES_DB}"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 15s
+
   music-web:
     image: ${RADIO_WEB_IMAGE:-local/music-web:dev}
     build:
@@ -145,6 +167,12 @@ services:
       RADIO_API_UUID: ${RADIO_API_UUID:?RADIO_API_UUID is required}
       RADIO_QUEUE_DIR: /queue/new
       RADIO_STATE_DIR: /state/jobs
+      RADIO_DB_HOST: postgres
+      RADIO_DB_PORT: "5432"
+      RADIO_DB_NAME: ${POSTGRES_DB:-music}
+      RADIO_DB_USER: ${POSTGRES_USER:-music}
+      RADIO_DB_PASSWORD_FILE: /run/secrets/postgres_password
+      RADIO_ADMIN_PASSWORD_FILE: /run/secrets/music_admin_password
       LIQUIDSOAP_CONTROL_HOST: liquidsoap
       LIQUIDSOAP_CONTROL_PORT: "1234"
       RADIO_MUSIC_DIR: /music
@@ -152,10 +180,15 @@ services:
       - ${MUSIC_DATA_DIR:-./data}/queue:/queue:rw
       - ${MUSIC_DATA_DIR:-./data}/state/jobs:/state/jobs:rw
       - ${MUSIC_DATA_DIR:-./data}/music:/music:ro
+    secrets:
+      - postgres_password
+      - music_admin_password
     expose:
       - "8080"
     depends_on:
       icecast-kh:
+        condition: service_healthy
+      postgres:
         condition: service_healthy
     networks:
       - edge
@@ -240,6 +273,10 @@ networks:
     driver: bridge
 
 secrets:
+  music_admin_password:
+    file: ${MUSIC_SECRETS_DIR:-./secrets}/music_admin_password
+  postgres_password:
+    file: ${MUSIC_SECRETS_DIR:-./secrets}/postgres_password
   icecast_source_password:
     file: ${MUSIC_SECRETS_DIR:-./secrets}/icecast_source_password
   icecast_admin_password:

@@ -12,12 +12,20 @@
 
 * { box-sizing: border-box; }
 html, body { margin: 0; min-height: 100%; background: var(--bg); color: var(--text); }
+body { min-height: 100svh; }
 body {
   padding: max(20px, env(safe-area-inset-top)) max(18px, env(safe-area-inset-right)) max(30px, env(safe-area-inset-bottom)) max(18px, env(safe-area-inset-left));
 }
 button, input { font: inherit; }
 button { -webkit-tap-highlight-color: transparent; }
 .terminal { width: min(1100px, 100%); margin: 0 auto; }
+.terminal[hidden], .auth-gate[hidden] { display: none !important; }
+.auth-gate { position: fixed; z-index: 100; inset: 0; display: grid; place-items: center; padding: 18px; background: var(--bg); }
+.auth-box { width: min(420px, 100%); }
+.auth-input { font-size: 16px; }
+.auth-input::placeholder { color: #666; opacity: 1; }
+.auth-input:focus::placeholder { opacity: 0; }
+.visually-hidden { position: absolute; width: 1px; height: 1px; padding: 0; margin: -1px; overflow: hidden; clip: rect(0, 0, 0, 0); white-space: nowrap; border: 0; }
 .header { margin-bottom: 36px; }
 .header-line { font-size: clamp(17px, 2vw, 22px); white-space: nowrap; overflow: hidden; }
 .prompt { color: var(--muted); }
@@ -97,4 +105,3 @@ button { -webkit-tap-highlight-color: transparent; }
   #submit { width: 100%; }
   .mode-option { min-height: 46px; }
 }
-

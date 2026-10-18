@@ -21,6 +21,10 @@
   const modeOptions = [...document.querySelectorAll(".mode-option")];
 
   const config = window.MUSIC_CONFIG;
+  const authGate = document.getElementById("auth-gate");
+  const authForm = document.getElementById("auth-form");
+  const adminPassword = document.getElementById("admin-password");
+  const adminApp = document.getElementById("admin-app");
   let apiBase = null;
   let tracks = [];
   let libraryLoading = false;
@@ -65,10 +69,17 @@
     }
 
     if (!response.ok) {
-      throw new Error(
+      const error = new Error(
         payload.error ||
         `HTTP ${response.status}`
       );
+      error.status = response.status;
+      error.attemptsRemaining = payload.attempts_remaining;
+      error.retryAfter = payload.retry_after;
+      if (response.status === 401 && !requestUrl.pathname.endsWith("/auth/login")) {
+        showAuth();
+      }
+      throw error;
     }
 
     return payload;
@@ -86,6 +97,18 @@
     if (!apiBase) {
       await bootstrap();
     }
+  }
+
+  function showAuth() {
+    authGate.hidden = false;
+    adminApp.hidden = true;
+  }
+
+  function showAdmin() {
+    authGate.hidden = true;
+    adminApp.hidden = false;
+    startMetadataReader();
+    refreshLibrary().catch((error) => setStatus(`LIBRARY ERROR: ${error.message}`));
   }
 
   function metadataText(value) {
@@ -679,19 +702,35 @@
     }
   );
 
-  bootstrap()
-    .then(
-      refreshLibrary
-    )
-    .catch(
-      (error) => {
-        setStatus(
-          `API ERROR: ${
-            error.message
-          }`
-        );
-      }
-    );
+  authForm.addEventListener("submit", async (event) => {
+    event.preventDefault();
+    adminPassword.disabled = true;
+    try {
+      await ensureApi();
+      await jsonRequest(`${config.apiBasePath}/auth/login`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ password: adminPassword.value })
+      });
+      adminPassword.value = "";
+      showAdmin();
+    } catch (error) {
+      // Keep the gate visually minimal; the server still enforces lockout.
+    } finally {
+      adminPassword.disabled = false;
+      if (!adminApp.hidden) adminPassword.blur();
+      else adminPassword.focus();
+    }
+  });
 
-  startMetadataReader();
+  (async () => {
+    try {
+      await bootstrap();
+      await jsonRequest(`${config.apiBasePath}/auth/session`);
+      showAdmin();
+    } catch (error) {
+      showAuth(error.status === 401 ? "password" : error.message);
+    }
+  })();
+
 })();

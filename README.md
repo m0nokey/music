@@ -15,10 +15,22 @@ Copy `.env.example` to `.env`, set a UUIDv4 for `RADIO_API_UUID` (for example, g
 
 - `secrets/icecast_source_password`
 - `secrets/icecast_admin_password`
+- `secrets/postgres_password`
+- `secrets/music_admin_password`
+
+Use strong, distinct passwords for `postgres_password` and `music_admin_password`. The PostgreSQL container and API read them through Compose file-backed secrets; keep both outside Git. On Linux, make them readable by the API's group (`10000`) while keeping them private, for example owner `root:10000` and mode `0440`. The `/play/` password gate allows three attempts per client IP and then locks that IP for 15 minutes. Successful login creates an HTTP-only, SameSite session cookie that expires after 12 hours. The PostgreSQL 18 data directory is persisted under `data/postgres`; do not point that directory at an older PostgreSQL data volume without a planned database upgrade.
+
+Generate the admin password and grant the API read access to the two secrets:
+
+```sh
+openssl rand -hex 32 | sudo tee secrets/music_admin_password >/dev/null
+sudo chown root:10000 secrets/postgres_password secrets/music_admin_password
+sudo chmod 0440 secrets/postgres_password secrets/music_admin_password
+```
 
 The Icecast container runs as UID:GID `10001:10000`. For file-backed Compose secrets on Linux, set the source secret to owner/group `10001:10000` and mode `0440`; Liquidsoap joins GID `10000` to read it during startup. The admin secret can remain mode `0400`, owned by `10001:10000`. Compose mounts each secret at `/run/secrets/<secret-name>`.
 
-Create the data directories `data/{music,queue,incoming,state/jobs,logs/icecast,hls}`. Put AAC-compatible music source files in `data/music`. The worker runs as UID:GID `10001:10000` by default; make its writable bind-mounted directories owned by that ID before first start (adjust IDs in `.env` if needed):
+Create the data directories `data/{music,queue,incoming,state/jobs,logs/icecast,hls,postgres}`. Put AAC-compatible music source files in `data/music`. The worker runs as UID:GID `10001:10000` by default; make its writable bind-mounted directories owned by that ID before first start (adjust IDs in `.env` if needed):
 
 ```sh
 sudo chown -R 10001:10000 data/queue data/incoming data/music data/state
@@ -40,7 +52,7 @@ docker compose up -d
 docker compose ps
 ```
 
-The web service binds `127.0.0.1:8088` by default for local checks and joins `edge` so the reverse proxy can address `music-web:8080`. API, Icecast and web are also attached to `edge`; keep that network private to trusted infrastructure. TLS certificates and domain names remain the responsibility of the outer proxy.
+The web service binds `127.0.0.1:8088` by default for local checks and joins `edge` so the reverse proxy can address `music-web:8080`. API, Icecast and web are also attached to `edge`; keep that network private to trusted infrastructure. PostgreSQL is only attached to the internal `radio` network and is not published on the host. TLS certificates and domain names remain the responsibility of the outer proxy.
 
 The bundled DotGothic16 font is licensed under SIL Open Font License 1.1; its license is included at `web/public/fonts/OFL.txt` ([upstream project](https://github.com/fontworks-fonts/DotGothic16)). Check the redistribution terms for the separately bundled FixederSys font before publishing the repository.
 
